@@ -1,0 +1,196 @@
+<!-- ML with teachable machine
+ 　　　Dec14, 2024, ms -->
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <title>H02 test: local model files</title>
+        <meta charset="utf-8">
+        <style>
+            h1 {
+                font-size:24px;
+                font-family:'Franklin Gothic Medium', 'Arial Narrow', Arial, sans-serif;
+                font-weight: bold;
+                color: #2d228d;
+                }
+            .fs-label {
+                font-size:18px;
+                font-family: 'Courier New', Courier, monospace;
+                font-weight: bold;
+                color: #0e6e9a;
+                display: inline-block;
+                width: 6em;
+                text-align: right;
+                height: 24px;
+            }
+            #webcam-container {
+                margin: 10px;
+            }
+            #graph_area {
+                margin: 10px;
+                width: 200px;
+            }
+            #graph_canvas {
+                height: 320px; /* change here for less or more count of classes*/
+            }
+        </style>
+
+        <!--- tf and tm libs -->
+        <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest/dist/tf.min.js"></script>
+        <script src="https://cdn.jsdelivr.net/npm/@teachablemachine/image@latest/dist/teachablemachine-image.min.js"></script>
+        <!--- copied from gokuri -->
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/2.9.4/Chart.min.js"></script>
+    </head>
+
+    <body>
+        <h1>
+            Select model files and click Start!
+        </h1>
+        <!--- get local files -->
+        <div id="file-selections">
+            <div>
+                <label class="fs-label" for="model">model:</label>
+                <input type="file" id="local-model" >
+            </div>
+
+            <div>
+                <label class="fs-label" for="weights">weights:</label>
+                <input type="file" id="local-weights" >
+            </div>
+
+            <div>
+                <label class="fs-label" for="metadata">metadata:</label>
+                <input type="file" id="local-metadata" >
+            </div>
+        </div>
+
+        <!--- start button -->
+        <div>
+            <label class="fs-label" for="button">click! 👉</label>
+            <button type="button" onclick="init()">Start</button>
+        </div>
+        <!--- camera window -->
+        <div id="webcam-container"></div>
+
+        <!--- prob. labels (original) -->
+        <!--- <div id="label-container"></div> --->
+
+        <!--- prob. bars -->
+        <div id="graph_area">
+            <canvas id="graph_canvas" height="320px"></canvas>
+        </div>
+
+
+
+        <!--- my js: modified from tm template -->
+        <script type="text/javascript">
+            // from gokuri counter
+            //
+            // predict bars
+            // Predict data settings
+            var predata = {
+                labels: [],
+                datasets: [
+                    {
+                        data: [0, 0, 0, 0],
+                        backgroundColor: "rgba(15, 100, 255, 0.5)",
+                    }
+                ],
+            };
+
+            // bar chart
+            function predict_display() {
+                var options = {
+                        tooltips: {
+                            enabled: false
+                        },
+                        legend: {
+                            display: false
+                        },
+                        scales: {
+                            yAxes: [{
+                                ticks: {
+                                    display: true,
+                                    mirror: true
+                                }
+                            }],
+                            xAxes: [{
+                                ticks: {
+                                    max: 100,
+                                    min: 0,
+                                    display: true,
+                                    mirror: false,
+                                    stepSize: 20
+                                }
+                            }]
+                        },
+
+                    };
+
+                var g_canvas = document.getElementById('graph_canvas');
+                window.pred_bars = new Chart(g_canvas, {
+                    type: 'horizontalBar',
+                    data: predata,
+                    options: options
+                });
+            }
+
+            // More API functions here:
+            // https://github.com/googlecreativelab/teachablemachine-community/tree/master/libraries/image
+
+            let model, webcam, labelContainer, maxPredictions;
+
+            // Load the image model and setup the webcam
+            async function init() {
+                // load the "local" model, weights, and metadata files
+                // tmImage.loadFromFiles() does this work
+                // see https://github.com/googlecreativelab/teachablemachine-community/blob/master/libraries/image/README.md#loading-the-model---browser-files
+                const localModel = document.getElementById('local-model');
+                const localWeights = document.getElementById('local-weights');
+                const localMetadata = document.getElementById('local-metadata');
+                model = await tmImage.loadFromFiles(localModel.files[0], localWeights.files[0], localMetadata.files[0])
+
+                maxPredictions = model.getTotalClasses();
+
+                // Convenience function to setup a webcam
+                const flip = true; // whether to flip the webcam
+                webcam = new tmImage.Webcam(200, 200, flip); // width, height, flip
+                await webcam.setup(); // request access to the webcam
+                await webcam.play();
+                window.requestAnimationFrame(loop);
+
+                // append elements to the DOM
+                document.getElementById("webcam-container").appendChild(webcam.canvas);
+                //labelContainer = document.getElementById("label-container");
+                // for (let i = 0; i < maxPredictions; i++) { // and class labels
+                //     labelContainer.appendChild(document.createElement("div"));
+                // }
+
+                // the bar chart
+                predict_display()
+            }
+
+            async function loop() {
+                webcam.update(); // update the webcam frame
+                await predict();
+                window.requestAnimationFrame(loop);
+            }
+
+            // run the webcam image through the image model
+            async function predict() {
+                // predict can take in an image, video or canvas html element
+                const prediction = await model.predict(webcam.canvas);
+                for (let i = 0; i < maxPredictions; i++) {
+                    // bar chart
+                    predata.labels[i] = prediction[i].className;
+			        predata.datasets[0].data[i] = prediction[i].probability.toFixed(2) * 100;
+
+                    // original pred value display
+                    // const classPrediction =
+                    //     prediction[i].className + ": " + prediction[i].probability.toFixed(2);
+                    // labelContainer.childNodes[i].innerHTML = classPrediction;
+                }
+                pred_bars.update();
+            }
+        </script>
+    </body>
+</html>
